@@ -95,15 +95,17 @@ export function SetExternalDocumentFilters(filters: FilterFunctions) {
 }
 
 export async function GetURLHash(url: string, filters: string[]): Promise<URLCacheRecord> {
-  if (URLCaches.hasOwnProperty(url)) {
-    if (isURLCacheRecord(URLCaches[url])) {
-      return URLCaches[url];
-    } else if (URLCaches[url].hasOwnProperty("then")) {
-      return await (URLCaches[url] as Promise<URLCacheRecord>);
+
+  const hashKey = crypto.createHash("sha256").update(url+filters.join(",")).digest("hex").substring(0, 6)
+  if (URLCaches.hasOwnProperty(hashKey)) {
+    if (isURLCacheRecord(URLCaches)) {
+      return URLCaches[hashKey];
+    } else if (URLCaches[hashKey].hasOwnProperty("then")) {
+      return await (URLCaches[hashKey] as Promise<URLCacheRecord>);
     }
   }
 
-  URLCaches[url] = new Promise<URLCacheRecord>(async (resolve, reject) => {
+  URLCaches[hashKey] = new Promise<URLCacheRecord>(async (resolve, reject) => {
     let response: AxiosResponse;
     let pageData: string = "";
     let filtersApplied: string[] = [];
@@ -136,12 +138,14 @@ export async function GetURLHash(url: string, filters: string[]): Promise<URLCac
       }
       pageData = response.data;
       for (let f of filters) {
-        if (typeof allFilters[f] == "function") {
-          let newData = allFilters[f](pageData);
-          if (newData != pageData) {
-            filtersApplied.push(f);
-            pageData = newData;
-          }
+        if (typeof allFilters[f] != "function") {
+          continue;
+        }
+        let newData = allFilters[f](pageData);
+        if (newData != pageData) {
+          filtersApplied.push(f);
+          pageData = newData;
+         
         }
       }
     } catch (err) {
@@ -158,14 +162,14 @@ export async function GetURLHash(url: string, filters: string[]): Promise<URLCac
       crypto.createHash("sha256").update(pageData).digest("hex").substring(0, 6) +
       (filtersApplied.length > 0 ? "-" + filtersApplied.join(",") : "");
       return resolve({
-      filteredContent: pageData,
-      hash: hash,
-      isCacheRecord: true,
-      filtersApplied: filtersApplied
-    });
-    //log("using new url hash promise"+ url)
+        filteredContent: pageData,
+        hash: hash,
+        isCacheRecord: true,
+        filtersApplied: filtersApplied
+      });
+      //log("using new url hash promise"+ url)
   });
-  return URLCaches[url];
+  return URLCaches[hashKey];
 }
 
 export async function CheckGlobDocs(glob: string): Promise<ExternalDocumentRecord[]> {
