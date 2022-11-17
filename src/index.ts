@@ -5,6 +5,7 @@ import VinylFS from "vinyl-fs";
 import File from "vinyl";
 import fs from "fs";
 import { decode } from 'html-entities';
+import cloudscraper from "cloudscraper"
 
 /**
  * Applies any number of transformations to the Axios response content
@@ -66,6 +67,19 @@ let allFilters: FilterFunctions = {
     const decoded = decode(result[1])
     const slug = new RegExp(/"(?:slug)?updatedAt".*?,/,"gmi")
     return decoded.replace(slug,"")
+  },
+  cloudflare: (content)=>{
+    const r = new RegExp(/<script>.*?challenge-platform.*?<\/script>/,"gmi")
+    return content.replace(r,"")
+  },
+  zendesk: (content)=> {
+    const vr = new RegExp(/<!-- (v\d+) -->/,"gmi")
+    const result = vr.exec(content)
+    if (result == null || result[1]==null) {
+      return content
+    }
+    const replace = new RegExp(`${result[1]}`,"gmi")
+    return content.replace(replace,"")
   }
 };
 
@@ -94,6 +108,30 @@ export function SetExternalDocumentFilters(filters: FilterFunctions) {
   };
 }
 
+async function BestEffortURLScrape(url: string): Promise<string> {
+  try {
+    let response = await axios({ 
+      headers: {
+        "User-Agent": USER_AGENT_HEADER
+      },
+      url: url 
+    });
+    return response.data
+  } catch (urlError) {
+    try {
+      // Some sites are on CloudFlare which blocks Axios requests; fall back to cloudscraper
+      let response = await cloudscraper({
+        url: url,
+        method: "GET"
+      })
+      return response
+    }
+    catch (err) {
+      throw "Failed to fetch url"
+    }
+  }
+}
+
 export async function GetURLHash(url: string, filters: string[]): Promise<URLCacheRecord> {
 
   const hashKey = crypto.createHash("sha256").update(url+filters.join(",")).digest("hex").substring(0, 6)
@@ -106,37 +144,32 @@ export async function GetURLHash(url: string, filters: string[]): Promise<URLCac
   }
 
   URLCaches[hashKey] = new Promise<URLCacheRecord>(async (resolve, reject) => {
-    let response: AxiosResponse;
     let pageData: string = "";
     let filtersApplied: string[] = [];
   
     try {
-      response = await axios({ 
-        headers: {
-          "User-Agent": USER_AGENT_HEADER
-        },
-        url: url 
-      });
-    } catch (urlError) {
+      pageData = await BestEffortURLScrape(url)
+    }
+    catch(err) {
       return resolve({
         filteredContent: "",
         filtersApplied: [],
-        hash: "BAD URL: " + urlError.message,
+        hash: "Failed to scrape URL: " + err.message,
         isCacheRecord: true,
         isError: true
       });
     }
+
     try {
-      if (typeof response.data != "string") {
+      if (typeof(pageData) != "string") {
         return resolve({
           filteredContent: "",
           filtersApplied: [],
-          hash: "Non-string returned: " + response.data,
+          hash: "Non-string returned",
           isCacheRecord: true,
           isError: true
         });
       }
-      pageData = response.data;
       for (let f of filters) {
         if (typeof allFilters[f] != "function") {
           continue;
