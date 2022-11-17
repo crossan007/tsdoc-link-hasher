@@ -64,7 +64,7 @@ let allFilters: FilterFunctions = {
     }
     // ReadmeIO gives us the OAS JSON blob
     const decoded = decode(result[1])
-    const slug = new RegExp(/"slugUpdatedAt".*?,/,"gmi")
+    const slug = new RegExp(/"(?:slug)?updatedAt".*?,/,"gmi")
     return decoded.replace(slug,"")
   }
 };
