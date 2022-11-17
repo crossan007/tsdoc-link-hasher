@@ -109,11 +109,14 @@ export function SetExternalDocumentFilters(filters: FilterFunctions) {
 }
 
 async function BestEffortURLScrape(url: string): Promise<string> {
+  let headers = {
+    "User-Agent": USER_AGENT_HEADER,
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+  };
   try {
     let response = await axios({ 
-      headers: {
-        "User-Agent": USER_AGENT_HEADER
-      },
+      headers: headers,
       url: url 
     });
     return response.data
@@ -121,6 +124,7 @@ async function BestEffortURLScrape(url: string): Promise<string> {
     try {
       // Some sites are on CloudFlare which blocks Axios requests; fall back to cloudscraper
       let response = await cloudscraper({
+        headers: headers,
         url: url,
         method: "GET"
       })

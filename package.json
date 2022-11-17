@@ -1,6 +1,6 @@
 {
   "name": "tsdoc-link-hasher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Developer tooling to track updates to URLs in TSDoc comments",
   "types": "./lib/cjs/types/index.d.ts",
   "main": "./lib/cjs/index.js",
