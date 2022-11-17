@@ -80,6 +80,15 @@ let allFilters: FilterFunctions = {
     }
     const replace = new RegExp(`${result[1]}`,"gmi")
     return content.replace(replace,"")
+  },
+  datadog: (content) => {
+    const vr = new RegExp(/DD_RUM[\s\S]*?version: '(.*?)',/gmi)
+    const result = vr.exec(content)
+    if (result == null || result[1] == null){ 
+      return content
+    }
+    const replace = new RegExp(`${result[1]}`,"gmi")
+    return content.replace(replace,"")
   }
 };
 
