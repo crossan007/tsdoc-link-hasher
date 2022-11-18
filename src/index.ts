@@ -4,19 +4,11 @@ import crypto from "crypto";
 import VinylFS from "vinyl-fs";
 import File from "vinyl";
 import fs from "fs";
-import { decode } from 'html-entities';
 import cloudscraper from "cloudscraper"
+import { baseFilters, FilterFunctions } from "./filters";
+export { FilterFunction } from "./filters";
 
-/**
- * Applies any number of transformations to the Axios response content
- * so that future fetches of the same url will generate the same hash.
- *
- * I.e. remove nonce values from the DOM (since these change with each page load)
- *
- */
-type FilterFunction = (content: string) => string;
-
-type FilterFunctions = Record<string, FilterFunction>;
+let allFilters: FilterFunctions = baseFilters;
 
 export type ExternalDocumentRecord = {
   Path: string;
@@ -47,50 +39,7 @@ let shouldUpdateFiles: boolean = true;
 let shouldCacheResponses: boolean = true;
 
 let URLCaches: Record<string, URLCacheRecord | Promise<URLCacheRecord>> = {};
-let allFilters: FilterFunctions = {
-  body: (content: string) => {
-    const bodyRegex = new RegExp(/(<body[\s\S]*?<\/body.*?>)/gim);
-    const bodyMatches = bodyRegex.exec(content);
-    if (bodyMatches == null || bodyMatches[1] == null) {
-      return content;
-    }
-    return bodyMatches[1];
-  },
-  nonce: (content)=>content.replace(/<.*(?:(?:nonce)|(?:csrfmiddlewaretoken)).*>/ig,""),
-  readmeio: (content)=>{
-    const r = new RegExp(/<script.*?data-initial-props="(.*?)"><\/script/,"gim")
-    const result = r.exec(content)
-    if (result == null || result[1]==null) {
-      return content
-    }
-    // ReadmeIO gives us the OAS JSON blob
-    const decoded = decode(result[1])
-    const slug = new RegExp(/"(?:slug)?updatedAt".*?,/,"gmi")
-    return decoded.replace(slug,"")
-  },
-  cloudflare: (content)=>{
-    const r = new RegExp(/<script>.*?challenge-platform.*?<\/script>/,"gmi")
-    return content.replace(r,"")
-  },
-  zendesk: (content)=> {
-    const vr = new RegExp(/<!-- (v\d+) -->/,"gmi")
-    const result = vr.exec(content)
-    if (result == null || result[1]==null) {
-      return content
-    }
-    const replace = new RegExp(`${result[1]}`,"gmi")
-    return content.replace(replace,"")
-  },
-  datadog: (content) => {
-    const vr = new RegExp(/DD_RUM[\s\S]*?version: '(.*?)',/gmi)
-    const result = vr.exec(content)
-    if (result == null || result[1] == null){ 
-      return content
-    }
-    const replace = new RegExp(`${result[1]}`,"gmi")
-    return content.replace(replace,"")
-  }
-};
+
 
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
@@ -112,7 +61,7 @@ function UpdateDocsInFile(file: File, docs: ExternalDocumentRecord[]) {
 
 export function SetExternalDocumentFilters(filters: FilterFunctions) {
   allFilters = {
-    ...allFilters,
+    ...baseFilters,
     ...filters
   };
 }
@@ -121,7 +70,12 @@ async function BestEffortURLScrape(url: string): Promise<string> {
   let headers = {
     "User-Agent": USER_AGENT_HEADER,
     "Accept-Language": "en-US,en;q=0.5",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site"
   };
   try {
     let response = await axios({ 
